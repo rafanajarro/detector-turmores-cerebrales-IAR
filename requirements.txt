@@ -1,0 +1,4 @@
+tensorflow==2.18.0   # Cargar el modelo .keras y realizar la predicción
+numpy==2.0.2         # Manejo del arreglo numérico de la imagen
+pillow==11.0.0       # Carga de la imagen subida por el usuario
+streamlit==1.40.1    # Interfaz web

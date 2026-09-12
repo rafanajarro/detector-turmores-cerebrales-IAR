@@ -1,0 +1,22 @@
+# Entorno virtual
+.venv/
+venv/
+
+# Dataset
+dataset/
+dataset.zip
+
+# Modelos
+modelo/*.keras
+modelo/*.zip
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# Cachés locales
+.ipynb_checkpoints/
+
+# Documentación de fase 2
+fase2/
