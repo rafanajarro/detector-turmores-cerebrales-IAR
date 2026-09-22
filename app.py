@@ -107,7 +107,7 @@ def predecir(ruta, img_bytes):
     return model.predict(arr)[0]
 
 def pct(x):
-    return f"{x * 100:.1f}".replace(".", ",") + " %"
+    return f"{x * 100:.2f}".replace(".", ",") + " %"
 
 st.markdown('<p class="dt-title">Detector de Tumores Cerebrales</p>', unsafe_allow_html=True)
 st.markdown('<p class="dt-lede">Clasificación de resonancias magnéticas cerebrales en cuatro categorías.</p>', unsafe_allow_html=True)
