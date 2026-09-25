@@ -8,24 +8,22 @@ from tensorflow import keras
 st.set_page_config(page_title="Detector de Tumores Cerebrales", layout="centered")
 CLASSES = ["glioma", "meningioma", "notumor", "pituitary"]
 NOMBRES = {
-    "glioma": "Glioma", 
+    "glioma": "Glioma",
     "meningioma": "Meningioma",
-    "notumor": "Sin tumor", 
+    "notumor": "Sin tumor",
     "pituitary": "Tumor pituitario",
 }
-
-
 MODELOS = {
     "CNN tradicional": {"ruta": "modelo/cnn.keras",
                         "acc": "95.86 %",
                         "params": "3.45 M",
                         "enfoque": "Entrenada desde cero"},
-    
+
     "ResNet50": {"ruta": "modelo/resnet.keras",
                  "acc": "93.45 %",
                  "params": "23.5 M",
                  "enfoque": "Transfer learning"},
-    
+
     "EfficientNetB0": {"ruta": "modelo/efficientnet.keras",
                        "acc": "89.77 %",
                        "params": "4.05 M",
@@ -95,78 +93,87 @@ html, body, [class*="css"], .stMarkdown { font-family:'Source Sans 3', system-ui
 </style>
 """, unsafe_allow_html=True)
 
+# Evita recargar el modelo del disco en cada interacción del usuario
 @st.cache_resource
-def cargar_modelo(ruta):
-    return keras.models.load_model(ruta)
+def cargar_modelo(ruta_modelo):
+    return keras.models.load_model(ruta_modelo)
 
+# Evita repetir la predicción si ya se calculó para esta imagen y modelo
 @st.cache_data(show_spinner=False)
-def predecir(ruta, img_bytes):
-    model = cargar_modelo(ruta)
-    img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-    arr = np.expand_dims(np.array(img.resize((224, 224)), dtype="float32"), axis=0)
-    return model.predict(arr)[0]
+def predecir(ruta_modelo, imagen_bytes):
+    modelo_cargado = cargar_modelo(ruta_modelo)
+    imagen = Image.open(io.BytesIO(imagen_bytes)).convert("RGB")
+    entrada_modelo = np.expand_dims(np.array(imagen.resize((224, 224)), dtype="float32"), axis=0)
+    return modelo_cargado.predict(entrada_modelo)[0]
 
-def pct(x):
-    return f"{x * 100:.2f}".replace(".", ",") + " %"
+# Formatea un decimal como porcentaje
+def formatear_porcentaje(valor):
+    return f"{valor * 100:.2f}".replace(".", ",") + " %"
 
 st.markdown('<p class="dt-title">Detector de Tumores Cerebrales</p>', unsafe_allow_html=True)
 st.markdown('<p class="dt-lede">Clasificación de resonancias magnéticas cerebrales en cuatro categorías.</p>', unsafe_allow_html=True)
 
-disponibles = {n: d for n, d in MODELOS.items() if os.path.exists(d["ruta"])}
-if not disponibles:
+# Solo se conservan los modelos cuyo archivo .keras realmente existe en disco
+modelos_disponibles = {
+    nombre_modelo: info_modelo
+    for nombre_modelo, info_modelo in MODELOS.items()
+    if os.path.exists(info_modelo["ruta"])
+}
+if not modelos_disponibles:
     st.error("No se encontró ningún modelo en la carpeta 'modelo/'.")
     st.stop()
 
 # ---------- Carga de la imagen ----------
-archivo = st.file_uploader("Imagen MRI (JPG o PNG)", type=["jpg", "jpeg", "png"])
+archivo_subido = st.file_uploader("Imagen MRI (JPG o PNG)", type=["jpg", "jpeg", "png"])
 
-if archivo is None:
+if archivo_subido is None:
     st.stop()
 
-img_bytes = archivo.getvalue()
-img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
-ancho, alto = img.size
+imagen_bytes = archivo_subido.getvalue()
+imagen = Image.open(io.BytesIO(imagen_bytes)).convert("RGB")
+ancho_px, alto_px = imagen.size
 
-# ---------- Imagen analizada ----------
+# --- Vista previa de la imagen subida ---
 st.markdown('<p class="dt-label">Imagen analizada</p>', unsafe_allow_html=True)
-c1, c2 = st.columns([1, 3.2], vertical_alignment="center")
-with c1:
-    st.image(img, width=104)
-with c2:
+col_miniatura, col_info_archivo = st.columns([1, 3.2], vertical_alignment="center")
+with col_miniatura:
+    st.image(imagen, width=104)
+with col_info_archivo:
     st.markdown(
-        f'<div class="dt-fname">{archivo.name}</div>'
-        f'<div class="dt-fdesc">{ancho} × {alto} px</div>',
+        f'<div class="dt-fname">{archivo_subido.name}</div>'
+        f'<div class="dt-fdesc">{ancho_px} × {alto_px} px</div>',
         unsafe_allow_html=True,
     )
 
-nombres = list(disponibles.keys())
-for tab, nombre in zip(st.tabs(nombres), nombres):
-    with tab:
-        d = disponibles[nombre]
-        pred = predecir(d["ruta"], img_bytes)
-        idx = int(np.argmax(pred))
+# Una pestaña por cada modelo disponible; cada una corre su propia predicción
+nombres_modelos = list(modelos_disponibles.keys())
+for pestana, nombre_modelo in zip(st.tabs(nombres_modelos), nombres_modelos):
+    with pestana:
+        info_modelo = modelos_disponibles[nombre_modelo]
+        probabilidades = predecir(info_modelo["ruta"], imagen_bytes)  # probabilidades para las 4 clases
+        idx_clase_ganadora = int(np.argmax(probabilidades))  # índice de la clase más probable
 
-        filas = ""
-        for i, c in enumerate(CLASSES):
-            win = "win" if i == idx else ""
-            filas += (
-                f'<div class="dt-bar {win}"><span class="name">{NOMBRES[c]}</span>'
-                f'<span class="dt-track"><span class="dt-fill" style="width:{pred[i]*100:.1f}%"></span></span>'
-                f'<span class="dt-pct">{pct(pred[i])}</span></div>'
+        filas_html = ""
+        for idx_clase, clase in enumerate(CLASSES):
+            es_ganadora = "win" if idx_clase == idx_clase_ganadora else ""
+            filas_html += (
+                f'<div class="dt-bar {es_ganadora}"><span class="name">{NOMBRES[clase]}</span>'
+                f'<span class="dt-track"><span class="dt-fill" style="width:{probabilidades[idx_clase]*100:.1f}%"></span></span>'
+                f'<span class="dt-pct">{formatear_porcentaje(probabilidades[idx_clase])}</span></div>'
             )
 
         st.markdown(
             f'<div class="dt-meta">'
-            f'<div><span class="lbl">Exactitud en prueba</span><span class="val">{d["acc"]}</span></div>'
-            f'<div><span class="lbl">Parámetros</span><span class="val">{d["params"]}</span></div>'
-            f'<div><span class="lbl">Enfoque</span><span class="val">{d["enfoque"]}</span></div>'
+            f'<div><span class="lbl">Exactitud en prueba</span><span class="val">{info_modelo["acc"]}</span></div>'
+            f'<div><span class="lbl">Parámetros</span><span class="val">{info_modelo["params"]}</span></div>'
+            f'<div><span class="lbl">Enfoque</span><span class="val">{info_modelo["enfoque"]}</span></div>'
             f'</div>'
             f'<div class="dt-result">'
-            f'<div><p class="who">Predicción — {nombre}</p>'
-            f'<p class="cls">{NOMBRES[CLASSES[idx]]}</p></div>'
-            f'<div class="dt-conf"><div class="n">{pct(pred[idx])}</div><div class="c">Confianza</div></div>'
+            f'<div><p class="who">Predicción — {nombre_modelo}</p>'
+            f'<p class="cls">{NOMBRES[CLASSES[idx_clase_ganadora]]}</p></div>'
+            f'<div class="dt-conf"><div class="n">{formatear_porcentaje(probabilidades[idx_clase_ganadora])}</div><div class="c">Confianza</div></div>'
             f'</div>'
             f'<p class="dt-label">Probabilidad por categoría</p>'
-            f'<div class="dt-bars">{filas}</div>',
+            f'<div class="dt-bars">{filas_html}</div>',
             unsafe_allow_html=True,
         )
